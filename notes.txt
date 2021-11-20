@@ -1,0 +1,11 @@
+vulns?
+	fallback funciton
+	change implementation during hacking round using proxy implementation (see liveoverflow video)
+	there is overflow
+		there is a SafeMath class in the ERC20 code
+		there is also Math.sol
+
+
+TODO
+	tooling
+		download all other smart contracts for easier auditing
