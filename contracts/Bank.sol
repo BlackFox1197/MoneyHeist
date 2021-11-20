@@ -200,13 +200,39 @@ contract Bank is IBank {
 
         }
 
+    /**
+     * The purpose of this function is to allow so called keepers to collect bad
+     * debt, that is in case the collateral ratio goes below 150% for any loan. 
+     * @param token - the address of the token used as collateral for the loan. 
+     * @param account - the account that took out the loan that is now undercollateralized.
+     * @return - true if the liquidation was successful, otherwise revert.
+     */
     function liquidate(address token, address account)
         payable
         external
         override
         returns (bool) {
-            
-    
+            if (token != hakToken){
+                    revert("token not supported");
+            }
+            if (accountBorrowedEth[account] == 0){
+                revert("no borrow");
+            }
+            if (getCollateralRatio(token, account) > 15000){
+                console.log(getCollateralRatio(token, account));
+                revert("healty position");
+            }
+            accountBalancesHak[msg.sender].deposit += getBalance(token);
+            getBalance(msg.sender);
+            accountBalancesHak[token].deposit = 0;
+            accountBalancesHak[token].interest = 0;
+            accountBorrowedEth[account] = 0;
+                // console.log(accountBalancesEth[account].deposit);
+                // console.log(getBalance(token));
+                // console.log(token);
+                // console.log(hakToken);
+                // console.log(accountBorrowedEth[account]);
+                
         }
 
     function getCollateralRatio(address token, address account)
@@ -226,7 +252,6 @@ contract Bank is IBank {
            else {
                 accountHere = getAccountWithAddress(token, account, false);
            }
-            
             // console.log(accountHere.deposit);
             // console.log(accountHere.borrowed);
             if(accountHere.borrowed == 0){
