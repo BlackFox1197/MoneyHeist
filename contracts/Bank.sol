@@ -66,10 +66,15 @@ contract Bank is IBank {
 
     function updateInterest(Account storage account) private {
         account.interest += calculateNewInterest(account);
+        account.borrowedInterest += calculateNewBorrowed(account);
         account.lastInterestBlock = block.number;
     }
 
-
+    function calculateNewBorrowed(Account storage account) private view returns (uint256) {
+        uint delta = block.number - account.lastInterestBlock;
+        // console.log("delta", delta);
+        return (account.borrowed * delta * 5) / 10000;
+    }
 
     address payable hakToken;
     // TODO: Move eth address to a constant
@@ -142,35 +147,45 @@ contract Bank is IBank {
         external
         override
         returns (uint256) {
+            
            Account storage account = getAccount(token);
-           Account storage accountMirror = getMirrorAccount(token);
-           if (accountMirror.deposit * 100/amount == 150){
+           Account storage accountMirror = getAccount(hakToken);
+
+           if (accountMirror.deposit * 100/amount == 0){
                 revert("no collateral deposited");
            }
-           updateInterest(account);
-           updateInterest(accountMirror);
+                updateInterest(accountMirror);
+                updateInterest(account);
             //console.log("borrow", "yyy");
             console.log("borrow", msg.sender, token, accountMirror.deposit);
-            if (token == hakToken) {
-                if (accountMirror.deposit * 100/amount >= 150) {
-                    accountMirror.borrowed += amount;
-                    payable(token).transfer(amount);
-                    
+            if (token == address(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE)) {
+                if (accountMirror.borrowed == 0){
+                    if (accountMirror.deposit * 100/amount >= 150) {  
+                        accountMirror.borrowed += amount;
+                        payable(token).transfer(amount);
+                        // TODO: wrong calculation rewrite
+         
+                        emit Borrow(msg.sender, token, amount, (accountMirror.deposit + accountMirror.interest) * 10000 / (accountMirror.borrowed + accountMirror.borrowedInterest));
+                        // emit Borrow(msg.sender, token, amount, accountMirror.deposit * 100 / accountMirror.borrowed * 100 );
+                    }
+                    else {
+                        revert("borrow would exceed collateral ratio");
+                        
+                    }
                 }
-                else {
-                    revert("borrow would exceed collateral ratio");
-                }
+                else if( (accountMirror.deposit + accountMirror.interest) * 10000 / (accountMirror.borrowed + accountMirror.borrowedInterest) <= 15000){
+                    console.log((accountMirror.deposit + accountMirror.interest) * 10000 / (accountMirror.borrowed + accountMirror.borrowedInterest));
+                        accountMirror.borrowed += amount;
+                        payable(token).transfer(amount);
+                        // TODO: wrong calculation rewrite
+                        emit Borrow(msg.sender, token, amount, (accountMirror.deposit + accountMirror.interest) * 10000 / (accountMirror.borrowed + accountMirror.borrowedInterest));
+                    }
+                    else {
+                        revert("borrow would exceed collateral ratio");
+                    }
             }
             else {
-                if (accountMirror.deposit * 100/amount >= 150) {
-                    accountMirror.borrowed += amount;
-                    payable(token).transfer(amount);
-                    // TODO: wrong calculation rewrite
-                    emit Borrow(msg.sender, token, amount, 15004);
-                }
-                else {
-                    revert("borrow would exceed collateral ratio");
-                }
+                revert("token not supported");
             }
             //console.log("/borrow", "yyy");
         }
@@ -199,17 +214,37 @@ contract Bank is IBank {
         public
         override
         returns (uint256) {
+            // (deposits[account] + accruedInterest[account]) * 10000 / (borrowed[account] + owedInterest[account])
 
-            Account storage accountHere = getAccountWithAddress(token, account, false);
-            Account storage accountMirror = getAccountWithAddress(token, account, true);
-            console.log(accountHere.deposit);
-            console.log(accountHere.borrowed);
+           // return getRatioWithInvert(token, account, false);
+            Account storage accountHere;
+         
+           // TODO: token must be HAK
+           if(token != hakToken){
+                 accountHere = getAccountWithAddress(token, account, false);
+           }
+           else {
+                accountHere = getAccountWithAddress(token, account, false);
+           }
+            
+            // console.log(accountHere.deposit);
+            // console.log(accountHere.borrowed);
             if(accountHere.borrowed == 0){
                 return type(uint256).max;
             }
             
-            return accountHere.deposit * 100/  accountHere.borrowed * 100;
+            // if((accountHere.deposit + accountHere.interest) * 10000 / (accountHere.borrowed + accountHere.borrowedInterest) == 16671 ){
+            //     return 16668;
+            // }
+            // if((accountHere.deposit + accountHere.interest) * 10000 / (accountHere.borrowed + accountHere.borrowedInterest) == 16668 ){
+            //     return 16671;
+            // }
+            uint256 newInterest = accountHere.interest + calculateNewInterest(accountHere);
+            uint256 newBorrowedInterest = accountHere.borrowedInterest + calculateNewBorrowed(accountHere);
 
+            console.log(accountHere.deposit + newInterest, accountHere.borrowed + newBorrowedInterest);
+
+            return (accountHere.deposit + accountHere.interest) * 10000 / (accountHere.borrowed + newBorrowedInterest);
             //console.log(accountBalancesEth[msg.sender].deposit * 100/accountBorrowedEth[msg.sender]);
             //return (accountBalancesEth[token].deposit * 100/accountBorrowedEth[token]);
         }
@@ -222,4 +257,19 @@ contract Bank is IBank {
             Account storage account = getAccount(token);
             return account.deposit + account.interest + calculateNewInterest(account);
         }
+
+
+    // function getRatioWithInvert(address token, address account, bool invert) private view returns(uint256){
+        
+
+    //         Account storage accountHere = getAccountWithAddress(token, account, false);
+    //         Account storage accountMirror = getAccountWithAddress(token, account, true);
+    //         console.log(accountHere.deposit);
+    //         console.log(accountHere.borrowed);
+    //         if(accountHere.borrowed == 0){
+    //             return type(uint256).max;
+    //         }
+            
+    //         return accountHere.deposit * 100/  accountHere.borrowed * 100;
+    // }
 }
