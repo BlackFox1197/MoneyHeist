@@ -6,6 +6,7 @@ interface IBank {
         uint256 deposit;           // accumulated deposits made into the account
         uint256 interest;          // accumulated interest
         uint256 lastInterestBlock; // block at which interest was last computed
+        uint256 borrowed;
     }
     // Event emitted when a user makes a deposit
     event Deposit(

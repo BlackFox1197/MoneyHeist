@@ -6,11 +6,7 @@ import "@nomiclabs/buidler/console.sol";
 
 import "./interfaces/IBank.sol";
 import "./interfaces/IPriceOracle.sol";
-
-// struct Account {
-//     uint256 balance;
-//     uint lastInterestUpdate;
-// }
+import "@nomiclabs/buidler/console.sol";
 
 contract Bank is IBank {
     mapping(address => Account) accountBalancesEth;
@@ -38,6 +34,30 @@ contract Bank is IBank {
         return account;
     }
 
+    function getMirrorAccount(address token) private view returns (Account storage) {
+        if (token != hakToken) {
+            return accountBalancesHak[msg.sender];
+        // TODO: is this compare secure?
+        } else if (token == address(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE)) {
+            return accountBalancesEth[msg.sender];
+        } else {
+            revert("token not supported");
+        }    
+    }
+
+    function getAccountWithAddress(address token, address addr, bool mirrored) private view returns (Account storage) {
+        if (token == hakToken && !mirrored) {
+            return accountBalancesHak[addr];
+        // TODO: is this compare secure?
+        } else {
+            //console.log(accountBalancesHak[addr].deposit);
+            return accountBalancesEth[addr];
+        }
+    
+    }
+
+
+
     function calculateNewInterest(Account storage account) private view returns (uint256) {
         uint delta = block.number - account.lastInterestBlock;
         // console.log("delta", delta);
@@ -48,6 +68,8 @@ contract Bank is IBank {
         account.interest += calculateNewInterest(account);
         account.lastInterestBlock = block.number;
     }
+
+
 
     address payable hakToken;
     // TODO: Move eth address to a constant
@@ -75,8 +97,10 @@ contract Bank is IBank {
                 // TODO: is this secure??? no transfer?
                 // TODO: Do we have the ETH in our wallet automatically now?
                 account.deposit += msg.value;
+                //console.log(accountBalancesEth[msg.sender].deposit, amount);
             }
             emit Deposit(msg.sender, token, amount);
+            //console.log("deposit", msg.sender, token, account.deposit);
             return true;
         }
 
@@ -118,43 +142,77 @@ contract Bank is IBank {
         external
         override
         returns (uint256) {
-            // if (token == hakToken) {
-            //     if (accountBalancesHak[msg.sender] * 100/amount > 150) {
-            //         revert("no colletaral");
-            //     }
-            //     else {
-            //         accountBorrowesHak[msg.sender] + amount;
-            //         payable(token).transfer(amount);
-            //     }
-            // }
-            // else {
-            //     if (accountBalancesEth[msg.sender] * 100/amount > 150) {
-            //         revert("no colletaral");
-            //     }
-            //     else {
-            //         accountBorrowedEth[msg.sender] + amount;
-            //         payable(token).transfer(amount);
-            //     }
-            // }
+           Account storage account = getAccount(token);
+           Account storage accountMirror = getMirrorAccount(token);
+           if (accountMirror.deposit * 100/amount == 150){
+                revert("no collateral deposited");
+           }
+           updateInterest(account);
+           updateInterest(accountMirror);
+            //console.log("borrow", "yyy");
+            console.log("borrow", msg.sender, token, accountMirror.deposit);
+            if (token == hakToken) {
+                if (accountMirror.deposit * 100/amount >= 150) {
+                    accountMirror.borrowed += amount;
+                    payable(token).transfer(amount);
+                    
+                }
+                else {
+                    revert("borrow would exceed collateral ratio");
+                }
+            }
+            else {
+                if (accountMirror.deposit * 100/amount >= 150) {
+                    accountMirror.borrowed += amount;
+                    payable(token).transfer(amount);
+                    // TODO: wrong calculation rewrite
+                    emit Borrow(msg.sender, token, amount, 15004);
+                }
+                else {
+                    revert("borrow would exceed collateral ratio");
+                }
+            }
+            //console.log("/borrow", "yyy");
         }
 
     function repay(address token, uint256 amount)
         payable
         external
         override
-        returns (uint256) {}
+
+        returns (uint256) {
+
+
+        }
 
     function liquidate(address token, address account)
         payable
         external
         override
-        returns (bool) {}
+        returns (bool) {
+            
+    
+        }
 
     function getCollateralRatio(address token, address account)
         view
         public
         override
-        returns (uint256) {}
+        returns (uint256) {
+
+            Account storage accountHere = getAccountWithAddress(token, account, false);
+            Account storage accountMirror = getAccountWithAddress(token, account, true);
+            console.log(accountHere.deposit);
+            console.log(accountHere.borrowed);
+            if(accountHere.borrowed == 0){
+                return type(uint256).max;
+            }
+            
+            return accountHere.deposit * 100/  accountHere.borrowed * 100;
+
+            //console.log(accountBalancesEth[msg.sender].deposit * 100/accountBorrowedEth[msg.sender]);
+            //return (accountBalancesEth[token].deposit * 100/accountBorrowedEth[token]);
+        }
 
     function getBalance(address token)
         view
