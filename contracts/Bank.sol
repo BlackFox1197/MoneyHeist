@@ -4,9 +4,8 @@ pragma solidity 0.7.0;
 // TODO: Remove again
 import "@nomiclabs/buidler/console.sol";
 
-import "./interfaces/IBank.sol";
-import "./interfaces/IPriceOracle.sol";
-import "@nomiclabs/buidler/console.sol";
+import "./IBank.sol";
+import "./IPriceOracle.sol";
 
 contract Bank is IBank {
     mapping(address => Account) accountBalancesEth;
