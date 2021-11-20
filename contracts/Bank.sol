@@ -1,6 +1,9 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity 0.7.0;
 
+// TODO: Remove again
+import "@nomiclabs/buidler/console.sol";
+
 import "./interfaces/IBank.sol";
 import "./interfaces/IPriceOracle.sol";
 
@@ -23,14 +26,27 @@ contract Bank is IBank {
     // }
 
     function getAccount(address token) private view returns (Account storage) {
+        Account storage account;
         if (token == hakToken) {
-            return accountBalancesHak[msg.sender];
+            account = accountBalancesHak[msg.sender];
         // TODO: is this compare secure?
         } else if (token == address(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE)) {
-            return accountBalancesEth[msg.sender];
+            account = accountBalancesEth[msg.sender];
         } else {
             revert("token not supported");
         }
+        return account;
+    }
+
+    function calculateNewInterest(Account storage account) private view returns (uint256) {
+        uint delta = block.number - account.lastInterestBlock;
+        // console.log("delta", delta);
+        return (account.deposit * delta * 3) / 10000;
+    }
+
+    function updateInterest(Account storage account) private {
+        account.interest += calculateNewInterest(account);
+        account.lastInterestBlock = block.number;
     }
 
     address payable hakToken;
@@ -48,16 +64,19 @@ contract Bank is IBank {
         external
         override
         returns (bool) {
-            // TODO: is memory correct here?
             Account storage account = getAccount(token);
+            updateInterest(account);
             if (token == hakToken) {
                 account.deposit += amount;
                 // TODO: Check that the sender has the amount?
                 hakToken.call(abi.encodeWithSignature("transferFrom(address,address,uint256)", msg.sender, address(this), amount));
             } else  {
+                require(amount == msg.value, "amount != msg.value");
                 // TODO: is this secure??? no transfer?
+                // TODO: Do we have the ETH in our wallet automatically now?
                 account.deposit += msg.value;
             }
+            emit Deposit(msg.sender, token, amount);
             return true;
         }
 
@@ -65,21 +84,34 @@ contract Bank is IBank {
         external
         override
         returns (uint256) {
-            // TODO: Update to also consider account.interest; need to move from interest => deposit?
             Account storage account = getAccount(token);
-            if (account.deposit == 0) {
+            updateInterest(account);
+            // console.log("withdraw", amount, "balance", getBalance(token));
+            if (getBalance(token) == 0) {
                 revert("no balance");
             }
-            if (amount > account.deposit) {
+            // revert(uintToString(getBalance(token)));
+            if (amount > getBalance(token)) {
                 revert("amount exceeds balance");
             }
-            account.deposit -= amount;
+            if (amount == 0) {
+                amount = getBalance(token);
+            }
+            // Prioritize withdrawing from deposit
+            uint256 amountFromDeposit = amount;
+            if (amount > account.deposit) {
+                uint256 amountFromInterest = amount - account.deposit;
+                account.interest -= amountFromInterest;
+                amountFromDeposit -= amountFromInterest;
+            }
+            account.deposit -= amountFromDeposit;
             if (token == hakToken) {
                 // TODO: Check that the sender has the amount?
                 hakToken.call(abi.encodeWithSignature("transfer(address,uint256)", msg.sender, amount));
             } else  {
                 // TODO: Payout ETH
             }
+            emit Withdraw(msg.sender, token, amount);
         }
 
     function borrow(address token, uint256 amount)
@@ -130,6 +162,6 @@ contract Bank is IBank {
         override
         returns (uint256) {
             Account storage account = getAccount(token);
-            return account.deposit;
+            return account.deposit + account.interest + calculateNewInterest(account);
         }
 }

@@ -4,6 +4,7 @@ vulns?
 	there is overflow
 		there is a SafeMath class in the ERC20 code
 		there is also Math.sol
+	deposit: amount != msg.value
 
 
 TODO
